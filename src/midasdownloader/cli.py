@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -105,7 +106,7 @@ def run_batch_download(settings: Settings, targets: List[StudentTarget], force: 
 
 @app.command(name="interactive")
 def interactive() -> None:
-    """Interactive guided wizard to enter URL template, cookie, and entrance IDs."""
+    """Interactive guided wizard to enter URL template, cookie, entrance IDs, and output folder."""
     console.print(
         Panel(
             "[bold cyan]🎓 MidasDownloader - Admit Card Downloader Wizard[/bold cyan]\n\n"
@@ -113,7 +114,8 @@ def interactive() -> None:
             "  1. Paste the admit card URL (with entranceid=...)\n"
             "  2. Provide or confirm your session authentication cookie\n"
             "  3. Load student list from report/Report.xls or paste IDs\n"
-            "  4. Verify login and batch download into out/YYYY-MM-DD_HH-MM-SS/",
+            "  4. Choose output folder name inside out/\n"
+            "  5. Verify login and batch download into out/<folder_name>/",
             border_style="cyan",
         )
     )
@@ -252,12 +254,32 @@ REQUEST_DELAY="{settings.request_delay}"
         console.print(f"  • {sp}")
     if len(targets) > 5:
         console.print(f"  [dim]... (+{len(targets) - 5} more students)[/dim]")
-    console.print(f"[dim]Output folder: {settings.output_dir.resolve()}[/dim]")
 
     # -------------------------------------------------------------
-    # Step 4: Pre-flight Verification Check
+    # Step 4: Output Folder Location
     # -------------------------------------------------------------
-    console.print("\n[bold yellow]Step 4: Verification & Download[/bold yellow]")
+    console.print("\n[bold yellow]Step 4: Output Folder Location[/bold yellow]")
+    console.print("Admit cards will be saved inside the [cyan]out/[/cyan] directory.")
+    default_folder = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    folder_name = Prompt.ask(
+        "[bold]Enter folder name inside out/[/bold]",
+        default=default_folder,
+    ).strip()
+
+    # Clean up folder name (remove leading out/ or out\ if entered)
+    if folder_name.startswith("out/") or folder_name.startswith("out\\"):
+        folder_name = folder_name[4:].strip()
+    folder_name = folder_name.strip("/\\")
+    if not folder_name:
+        folder_name = default_folder
+
+    settings.output_dir = Path("out") / folder_name
+    console.print(f"[green]✔ Output directory set to:[/green] [bold cyan]{settings.output_dir.resolve()}[/bold cyan]")
+
+    # -------------------------------------------------------------
+    # Step 5: Pre-flight Verification Check
+    # -------------------------------------------------------------
+    console.print("\n[bold yellow]Step 5: Verification & Download[/bold yellow]")
     first_target = targets[0]
     label = f"{first_target.name} ({first_target.clean_id})" if first_target.name else first_target.clean_id
     if Confirm.ask(f"Run a test check on the first student ([bold cyan]{label}[/bold cyan]) to verify login?", default=True):
@@ -290,7 +312,7 @@ REQUEST_DELAY="{settings.request_delay}"
                 raise typer.Exit(code=1)
 
     # -------------------------------------------------------------
-    # Step 5: Execute Batch Download
+    # Step 6: Execute Batch Download
     # -------------------------------------------------------------
     if Confirm.ask(f"Start downloading all [bold]{len(targets)}[/bold] admit cards into [cyan]{settings.output_dir}[/cyan]?", default=True):
         run_batch_download(settings, targets, force=False)
