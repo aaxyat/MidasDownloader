@@ -2,6 +2,8 @@
 
 from pathlib import Path
 from pypdf import PdfReader, PdfWriter
+from typer.testing import CliRunner
+from midasdownloader.cli import app
 from midasdownloader.downloader import (
     StudentTarget,
     deduplicate_targets,
@@ -17,6 +19,12 @@ from midasdownloader.pdf_merger import (
     combine_page1_only,
     combine_separate_pages,
 )
+
+
+def test_cli_default_invocation_launches_wizard():
+    runner = CliRunner()
+    result = runner.invoke(app, [], input="\n")
+    assert "MidasDownloader - Interactive Session" in result.stdout
 
 
 def test_sanitize_file_path():

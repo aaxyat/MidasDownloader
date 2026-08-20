@@ -40,6 +40,12 @@ app = typer.Typer(
 console = Console()
 
 
+@app.callback(invoke_without_command=True)
+def main_entrypoint(ctx: typer.Context) -> None:
+    """Fast, reliable, batch downloader for university entrance admit cards."""
+    if ctx.invoked_subcommand is None:
+        interactive()
+
 def handle_post_download_combination(output_dir: Path, downloaded_files: List[Path], prompt_user: bool = True) -> None:
     """Prompts user to combine downloaded admit cards and performs combination accordingly."""
     pdf_files = [f for f in downloaded_files if f and f.exists() and f.suffix.lower() == ".pdf" and f.stat().st_size > 0]
