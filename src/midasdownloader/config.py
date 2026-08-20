@@ -17,10 +17,9 @@ load_dotenv(override=False)
 
 
 def get_default_output_dir() -> Path:
-    """Generates a timestamped output directory path: out/YYYY-MM-DD_HH-MM-SS."""
+    """Generates a timestamped output directory path: <current_directory>/out/YYYY-MM-DD_HH-MM-SS."""
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    return Path(f"out/{timestamp}")
-
+    return Path.cwd() / "out" / timestamp
 
 def extract_user_agent_from_ci_session(cookie_str: str) -> Optional[str]:
     """Auto-extracts the User-Agent embedded in CodeIgniter's ci_session cookie."""

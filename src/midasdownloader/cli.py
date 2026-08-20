@@ -376,7 +376,7 @@ def interactive() -> None:
         if not folder_name:
             folder_name = default_folder
 
-        settings.output_dir = Path("out") / folder_name
+        settings.output_dir = Path.cwd() / "out" / folder_name
         console.print(f"[green]✔ Output directory set to:[/green] [bold cyan]{settings.output_dir.resolve()}[/bold cyan]")
 
         # 4. Optional Pre-flight Verification Check
