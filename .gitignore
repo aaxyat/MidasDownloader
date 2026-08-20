@@ -4,6 +4,12 @@ env/
 venv/
 ENV/
 
+# Build and Distribution artifacts
+dist/
+build/
+*.egg-info/
+.eggs/
+
 # Environment variables & secrets (Crucial: never commit session cookies)
 .env
 .env.local

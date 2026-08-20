@@ -6,9 +6,39 @@ Built with **Python 3.11+**, **uv**, **httpx**, **pypdf**, and **Typer**.
 
 ---
 
+## ⚡ Quick Run (No Installation Needed)
+
+You can run **MidasDownloader** instantly without cloning or setting up a virtual environment:
+
+### With `uvx` (Fastest):
+```bash
+# Direct from GitHub:
+uvx --from git+https://github.com/aaxyat/MidasDownloader midasdownloader
+
+# Or from PyPI (once published):
+uvx midasdownloader
+```
+
+### With `pipx`:
+```bash
+# Direct from GitHub:
+pipx run --spec git+https://github.com/aaxyat/MidasDownloader midasdownloader
+
+# Or from PyPI (once published):
+pipx run midasdownloader
+```
+
+### Or install via `pip`:
+```bash
+pip install git+https://github.com/aaxyat/MidasDownloader
+midasdownloader
+```
+
+---
+
 ## ✨ Features
 
-- 🪄 **Interactive Guided Wizard:** Simply run `uv run midasdownloader` to guide you through URL entry, authentication, student selection, and custom output folder selection.
+- 🪄 **Interactive Guided Wizard:** Run `midasdownloader` (or `uv run midasdownloader`) to guide you through URL entry, authentication, student selection, and custom output folder selection.
 - 📑 **Native ERP Report (`.xls`) Support:** Automatically parses student reports (e.g. `report_sample.xls` or `report/Report.xls`), extracting student names and parsing entrance formats like `EN-26-41819` → `41819`.
 - 🏷 **Clean File Naming:** Automatically names downloaded admit cards as `StudentName_id.pdf` (e.g. `Aarav_Sharma_41819.pdf`).
 - 📄 **Interactive PDF Combination:**
@@ -23,13 +53,14 @@ Built with **Python 3.11+**, **uv**, **httpx**, **pypdf**, and **Typer**.
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Local Project Setup
 
-### 1. Prerequisites
+### 1. Prerequisites & Installation
 Ensure you have [uv](https://docs.astral.sh/uv/) installed (or Python 3.11+).
 
 ```bash
-# Sync dependencies and create virtual environment
+git clone https://github.com/aaxyat/MidasDownloader.git
+cd MidasDownloader
 uv sync
 ```
 
@@ -64,6 +95,8 @@ ci_session="PASTE_YOUR_CI_SESSION_COOKIE_VALUE_HERE"
 #### Option A: Interactive Wizard (Recommended)
 Simply run:
 ```bash
+midasdownloader
+# or:
 uv run midasdownloader
 ```
 
@@ -72,7 +105,7 @@ uv run midasdownloader
    https://portal.university.example.edu/entrance/report/prints?entranceid=41819&levelid=3&facultyid=1&programid=30&status=&orgid=undefined&academicbatch=&verified=&isverified=&examcenterid=Y&fromdate=2026-05-27&todate=2026-08-20
    ```
 2. **Step 2:** Confirm your cookie (`ci_session` from `.env`).
-3. **Step 3:** The wizard automatically detects `report/Report.xls` or `report_sample.xls`:
+3. **Step 3:** The wizard automatically detects `report_sample.xls` or your report file:
    ```text
    Found report file report/Report.xls with 53 students. Load from this file? [Y/n]
    ```
@@ -88,15 +121,14 @@ uv run midasdownloader
 
 #### Option B: Direct CLI Command (Using Report File)
 ```bash
-uv run midasdownloader download -f report_sample.xls -u "https://portal.university.example.edu/entrance/report/prints?entranceid={student_id}&levelid=3&facultyid=1&programid=30&status=&orgid=undefined&academicbatch=&verified=&isverified=&examcenterid=Y&fromdate=2026-05-27&todate=2026-08-20" -o out/BIT_Batch_2083
+midasdownloader download -f report_sample.xls -u "https://portal.university.example.edu/entrance/report/prints?entranceid={student_id}&levelid=3&facultyid=1&programid=30&status=&orgid=undefined&academicbatch=&verified=&isverified=&examcenterid=Y&fromdate=2026-05-27&todate=2026-08-20" -o out/BIT_Batch_2083
 ```
 
 ---
 
 #### Option C: Combine an Existing Folder of PDFs
-If you already downloaded admit cards and want to combine them at any time:
 ```bash
-uv run midasdownloader combine out/2026-08-20_12-41-12
+midasdownloader combine out/2026-08-20_12-41-12
 ```
 
 ---
@@ -123,23 +155,30 @@ Options:
 
 ---
 
-## 📂 Project Structure
+## 📦 Publishing to PyPI
 
-```text
-MidasDownloader/
-├── report_sample.xls         # Sample student export template
-├── src/
-│   └── midasdownloader/
-│       ├── __init__.py       # Package entrypoint
-│       ├── cli.py            # Typer CLI & interactive wizard
-│       ├── config.py         # Settings & User-Agent extraction
-│       ├── downloader.py     # HTML/XLS parser, streaming engine, PDF sanitizer
-│       └── pdf_merger.py     # Multi-page extraction and PDF combination logic
-├── tests/
-│   └── test_downloader.py    # Unit test suite
-├── .env.example              # Sample environment template (ci_session)
-├── .gitignore                # Protects secrets, downloads, and output folders
-├── pyproject.toml            # Project dependencies & CLI script mapping
-├── uv.lock                   # Deterministic lockfile
-└── README.md                 # Documentation
+To publish a new version to [PyPI](https://pypi.org/):
+
+```bash
+# 1. Build sdist and wheel
+uv build
+
+# 2. Publish to PyPI
+uv publish --token <your-pypi-api-token>
 ```
+
+Or trigger the automated GitHub Actions workflow by publishing a release on GitHub.
+
+---
+
+## 🛡 Security & Best Practices
+
+- **Never commit `.env`:** The `.env` file contains your active login cookie and is ignored by `.gitignore`.
+- **Session Expiration:** If downloads fail with `Authentication failed`, your session cookie in Chrome has expired. Simply log in again on Chrome and copy the refreshed `ci_session` value.
+- **Server Courtesy:** The default delay between downloads is `0.4s` to ensure reliable downloads without triggering rate-limits.
+
+---
+
+## 📄 License
+
+[MIT](LICENSE) © [Ayush Bhattarai](https://github.com/aaxyat)
