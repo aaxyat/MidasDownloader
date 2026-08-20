@@ -9,6 +9,7 @@ from midasdownloader.downloader import (
     parse_targets_from_file,
     parse_targets_from_range,
     parse_targets_from_text,
+    sanitize_file_path,
     suggest_url_template,
 )
 from midasdownloader.pdf_merger import (
@@ -16,6 +17,24 @@ from midasdownloader.pdf_merger import (
     combine_page1_only,
     combine_separate_pages,
 )
+
+
+def test_sanitize_file_path():
+    # Double quoted Windows path
+    p1 = sanitize_file_path('"C:\\Users\\aaxyat\\Downloads\\Report.xls"')
+    assert p1 == Path("C:\\Users\\aaxyat\\Downloads\\Report.xls")
+
+    # Single quoted Windows path
+    p2 = sanitize_file_path("'D:\\College\\report.xls'")
+    assert p2 == Path("D:\\College\\report.xls")
+
+    # PowerShell call prefix '&'
+    p3 = sanitize_file_path('& "report_sample.xls"')
+    assert p3 == Path("report_sample.xls")
+
+    # Path object passed directly
+    p4 = sanitize_file_path(Path("report_sample.xls"))
+    assert p4 == Path("report_sample.xls")
 
 
 def test_filename_formatting():
@@ -35,14 +54,13 @@ def test_entrance_no_extraction():
     assert extract_id_from_entrance_no("41626") == "41626"
 
 
-def test_report_xls_parsing():
-    sample_file = Path("report_sample.xls")
-    if sample_file.exists():
-        targets = parse_targets_from_file(sample_file)
-        assert len(targets) == 2
-        assert targets[0].student_id == "41819"
-        assert targets[0].name == "Sample Student One"
-        assert targets[0].get_filename() == "Sample_Student_One_41819.pdf"
+def test_report_xls_parsing_with_quotes():
+    sample_file = '"report_sample.xls"'
+    targets = parse_targets_from_file(sample_file)
+    assert len(targets) == 2
+    assert targets[0].student_id == "41819"
+    assert targets[0].name == "Sample Student One"
+    assert targets[0].get_filename() == "Sample_Student_One_41819.pdf"
 
 
 def test_comma_separated_parsing_and_deduplication():
@@ -63,7 +81,6 @@ def test_url_template_suggestion():
 
 
 def test_pdf_merging(tmp_path: Path):
-    # Create two 2-page dummy PDFs
     pdf1_path = tmp_path / "student1.pdf"
     pdf2_path = tmp_path / "student2.pdf"
 

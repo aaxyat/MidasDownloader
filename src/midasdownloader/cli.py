@@ -23,6 +23,7 @@ from .downloader import (
     parse_targets_from_file,
     parse_targets_from_range,
     parse_targets_from_text,
+    sanitize_file_path,
     suggest_url_template,
 )
 from .pdf_merger import (
@@ -207,20 +208,21 @@ def combine(
     ),
 ) -> None:
     """Combine existing admit card PDFs in a folder with interactive page options."""
-    if not folder.exists() or not folder.is_dir():
-        console.print(f"[bold red]Folder not found:[/bold red] {folder}")
+    clean_folder = sanitize_file_path(folder)
+    if not clean_folder.exists() or not clean_folder.is_dir():
+        console.print(f"[bold red]Folder not found:[/bold red] {clean_folder}")
         raise typer.Exit(code=1)
 
     pdf_files = sorted(
-        [f for f in folder.glob("*.pdf") if not f.name.startswith("combined_")],
+        [f for f in clean_folder.glob("*.pdf") if not f.name.startswith("combined_")],
         key=lambda x: x.name,
     )
     if not pdf_files:
-        console.print(f"[yellow]No PDF files found in {folder}[/yellow]")
+        console.print(f"[yellow]No PDF files found in {clean_folder}[/yellow]")
         raise typer.Exit(code=1)
 
-    console.print(f"[green]Found [bold]{len(pdf_files)}[/bold] PDF files in [cyan]{folder}[/cyan][/green]")
-    handle_post_download_combination(folder, pdf_files, prompt_user=False)
+    console.print(f"[green]Found [bold]{len(pdf_files)}[/bold] PDF files in [cyan]{clean_folder}[/cyan][/green]")
+    handle_post_download_combination(clean_folder, pdf_files, prompt_user=False)
 
 
 @app.command(name="interactive")
@@ -308,7 +310,7 @@ def interactive() -> None:
         settings.url_template = user_url
         console.print(f"[green]✔ URL Template set to:[/green] [bold]{settings.url_template}[/bold]")
 
-        # 2. Student Entrance IDs
+        # 2. Student Entrance IDs (Supports Windows Copy as path with quotes)
         console.print("\n[bold yellow]Step 2: Student Entrance IDs[/bold yellow]")
         targets: List[StudentTarget] = []
 
@@ -329,13 +331,14 @@ def interactive() -> None:
                 pass
 
         while not targets:
-            console.print("\nPaste your [bold cyan]comma-separated entrance IDs[/bold cyan] (e.g. 41819, 41829, 41891...) or enter a file path:")
+            console.print("\nPaste your [bold cyan]comma-separated entrance IDs[/bold cyan] (e.g. 41819, 41829, 41891...) or [bold cyan]file path[/bold cyan]:")
             raw_ids = Prompt.ask("[bold]Entrance IDs or File Path[/bold]").strip()
 
             if not raw_ids:
                 continue
 
-            potential_path = Path(raw_ids)
+            # Support Windows 'Copy as path' with or without quotes
+            potential_path = sanitize_file_path(raw_ids)
             if potential_path.exists() and potential_path.is_file():
                 try:
                     targets = parse_targets_from_file(potential_path)
@@ -508,7 +511,7 @@ def download(
     if cookie_name:
         settings.cookie_name = cookie_name
     if output_dir:
-        settings.output_dir = output_dir
+        settings.output_dir = sanitize_file_path(output_dir)
     if delay is not None:
         settings.request_delay = delay
 

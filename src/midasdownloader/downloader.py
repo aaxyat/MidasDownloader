@@ -7,7 +7,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional, Set
+from typing import Callable, List, Optional, Set, Union
 
 import httpx
 from rich.console import Console
@@ -61,6 +61,23 @@ class DownloadResult:
     error_message: str = ""
     file_size_bytes: int = 0
     content_type: str = ""
+
+
+def sanitize_file_path(path_input: Union[str, Path]) -> Path:
+    """Cleans up paths pasted from Windows 'Copy as path' (stripping surrounding quotes and ampersands)."""
+    if isinstance(path_input, Path):
+        return path_input
+
+    cleaned = str(path_input).strip()
+    if cleaned.startswith("&"):
+        cleaned = cleaned[1:].strip()
+
+    # Repeatedly strip surrounding single or double quotes
+    while (cleaned.startswith('"') and cleaned.endswith('"')) or (cleaned.startswith("'") and cleaned.endswith("'")):
+        cleaned = cleaned[1:-1].strip()
+
+    return Path(cleaned)
+
 
 def extract_id_from_entrance_no(raw_val: str) -> str:
     """Extracts numeric entrance ID from strings like 'EN-26-41819' -> '41819'."""
@@ -143,7 +160,6 @@ def parse_targets_from_text(text: str) -> List[StudentTarget]:
             if range_match:
                 targets.extend(parse_targets_from_range(token))
             else:
-                # Handle space-separated numbers if someone pasted e.g. "41626 41627 41628"
                 space_tokens = [s.strip() for s in token.split() if s.strip()]
                 if len(space_tokens) > 1 and all(extract_id_from_entrance_no(st).isdigit() for st in space_tokens):
                     for st in space_tokens:
@@ -196,22 +212,23 @@ def parse_targets_from_html_table(content: str) -> List[StudentTarget]:
     return targets
 
 
-def parse_targets_from_file(file_path: Path) -> List[StudentTarget]:
-    """Parses student targets from an XLS (HTML table), CSV, or text file."""
-    if not file_path.exists():
-        raise FileNotFoundError(f"Input file not found: {file_path}")
+def parse_targets_from_file(file_path: Union[str, Path]) -> List[StudentTarget]:
+    """Parses student targets from an XLS (HTML table), CSV, or text file with sanitized path handling."""
+    clean_path = sanitize_file_path(file_path)
+    if not clean_path.exists():
+        raise FileNotFoundError(f"Input file not found: {clean_path}")
 
-    suffix = file_path.suffix.lower()
+    suffix = clean_path.suffix.lower()
 
     # Check for HTML table in .xls or .html files
     if suffix in (".xls", ".html", ".htm"):
-        content = file_path.read_text(encoding="utf-8", errors="ignore")
+        content = clean_path.read_text(encoding="utf-8", errors="ignore")
         if "<table" in content.lower() or "<tr" in content.lower():
             return deduplicate_targets(parse_targets_from_html_table(content))
 
     if suffix == ".csv":
         targets: List[StudentTarget] = []
-        with open(file_path, "r", encoding="utf-8-sig") as f:
+        with open(clean_path, "r", encoding="utf-8-sig") as f:
             sample = f.read(2048)
             f.seek(0)
             has_header = csv.Sniffer().has_header(sample) if sample.strip() else False
@@ -247,13 +264,13 @@ def parse_targets_from_file(file_path: Path) -> List[StudentTarget]:
         return deduplicate_targets(targets)
 
     # Plain text file
-    with open(file_path, "r", encoding="utf-8-sig") as f:
+    with open(clean_path, "r", encoding="utf-8-sig") as f:
         content = f.read()
         return deduplicate_targets(parse_targets_from_text(content))
 
 
 def parse_targets_from_range(id_range: str) -> List[StudentTarget]:
-    """Parses a numerical range like '41600-41650' or '2024001..2024060'."""
+    """Parses a numerical range like '41600-41650' or '2024001..2024050'."""
     match = re.match(r'^(\d+)\s*(?:-|to|\.\.)\s*(\d+)$', id_range.strip(), re.IGNORECASE)
     if not match:
         raise ValueError(f"Invalid range format '{id_range}'. Expected format: '41600-41650' or '2024001..2024050'")
