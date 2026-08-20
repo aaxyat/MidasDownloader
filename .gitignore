@@ -1,0 +1,46 @@
+# Python virtual environment
+.venv/
+env/
+venv/
+ENV/
+
+# Environment variables & secrets (Crucial: never commit session cookies)
+.env
+.env.local
+.env.*.local
+*.secret
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Output and downloaded files
+out/
+downloads/
+output/
+admit_cards/
+*.pdf
+*.html
+
+# Real student report data (Protecting student PII)
+report/
+*.xls
+*.xlsx
+!report_sample.xls
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/

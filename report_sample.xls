@@ -1,0 +1,30 @@
+ <table class="table" id="dashboardTableteacher" border="1"><thead>    
+                         <tr>
+                             <th> sn </th>
+                             <th> Entrance No </th>
+                             <th> Student Name  </th>
+                             <th> Gender </th>
+                             <th> Mobile No </th>
+                             <th> Email </th>
+                             <th> Level </th>
+                             <th> Faculty </th>
+                             <th> Program </th>
+                             <th> Campus </th>
+                             <th> Exam Center </th>
+                             <th> Amount </th>
+                             <th> Payment Status </th>
+                             <th> Transaction Code </th>
+                             <th> Product Code </th>
+                             <th> Payment Method </th>
+                             <th> Payment Type </th>
+                             <th> Status </th>
+                             <th> Applied Date </th>
+                             <th> Status Updated </th>
+                             <th> Category </th>
+                             <th> percentage </th>
+                             <th> Student Address </th>
+                         </tr>
+                     </thead>
+<tbody><tr><td>1</td><td>EN-26-41819</td><td>Sample Student One</td><td>male</td><td>9800000001</td><td>student1@example.edu</td><td>Bachelor</td><td>Science And Technology</td><td>BACHELOR OF INFORMATION TECHNOLOGY (B.I.T.)</td><td>SAMPLE SCHOOL OF SCIENCE AND TECHNOLOGY</td><td>Sample School Exam Center</td><td>1500</td><td>Paid</td><td>SAMPLE1</td><td>PROD1-41819</td><td>eSewa</td><td>Online Payment</td><td>University Accepted</td><td>2026-07-07 14:04:38</td><td></td><td>OPEN</td><td>{"SEE or Equivalent=>"}</td><td>SAMPLE CITY : 1</td></tr>
+<tr><td>2</td><td>EN-26-41829</td><td>Sample Student Two</td><td>female</td><td>9800000002</td><td>student2@example.edu</td><td>Bachelor</td><td>Science And Technology</td><td>BACHELOR OF INFORMATION TECHNOLOGY (B.I.T.)</td><td>SAMPLE SCHOOL OF SCIENCE AND TECHNOLOGY</td><td>Sample School Exam Center</td><td>1500</td><td>Paid</td><td>SAMPLE2</td><td>PROD2-41829</td><td>eSewa</td><td>Online Payment</td><td>University Accepted</td><td>2026-07-07 14:07:04</td><td></td><td>OPEN</td><td>{"SEE or Equivalent=>"}</td><td>SAMPLE CITY : 2</td></tr>
+</tbody></table>
