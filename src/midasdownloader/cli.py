@@ -11,7 +11,7 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
 from .config import Settings
@@ -25,6 +25,11 @@ from .downloader import (
     parse_targets_from_text,
     suggest_url_template,
 )
+from .pdf_merger import (
+    combine_all_pages_together,
+    combine_page1_only,
+    combine_separate_pages,
+)
 
 app = typer.Typer(
     name="midasdownloader",
@@ -34,7 +39,92 @@ app = typer.Typer(
 console = Console()
 
 
-def run_batch_download(settings: Settings, targets: List[StudentTarget], force: bool = False) -> None:
+def handle_post_download_combination(output_dir: Path, downloaded_files: List[Path], prompt_user: bool = True) -> None:
+    """Prompts user to combine downloaded admit cards and performs combination accordingly."""
+    pdf_files = [f for f in downloaded_files if f and f.exists() and f.suffix.lower() == ".pdf" and f.stat().st_size > 0]
+    
+    # If downloaded_files is empty, look into output_dir
+    if not pdf_files and output_dir.exists():
+        pdf_files = sorted(
+            [f for f in output_dir.glob("*.pdf") if not f.name.startswith("combined_")],
+            key=lambda x: x.name,
+        )
+
+    if not pdf_files:
+        return
+
+    console.print("\n[bold yellow]📄 Post-Download PDF Options[/bold yellow]")
+
+    # Question 1: Do they want the admit card combined?
+    if prompt_user:
+        combine_choice = Confirm.ask(
+            "[bold cyan]1. Do you want to combine the downloaded admit cards into a single PDF?[/bold cyan]",
+            default=True,
+        )
+        if not combine_choice:
+            console.print("[dim]Skipping PDF combination. Individual PDFs are saved in the output directory.[/dim]")
+            return
+
+    # Question 2: Do they need the second page of the pdf?
+    need_second_page = Confirm.ask(
+        "[bold cyan]2. Do you need the second page (instructions/rules) of the admit cards?[/bold cyan]",
+        default=False,
+    )
+
+    if not need_second_page:
+        # Case 1: Page 1 only
+        combined_file = output_dir / "combined_admit_cards_page1.pdf"
+        console.print(f"[cyan]Combining Page 1 of {len(pdf_files)} admit cards...[/cyan]")
+        count = combine_page1_only(pdf_files, combined_file)
+        console.print(
+            Panel(
+                f"[bold green]✔ Successfully created combined PDF (Page 1 only)![/bold green]\n\n"
+                f"• [bold]Output File:[/bold] {combined_file.resolve()}\n"
+                f"• [bold]Total Pages Merged:[/bold] {count}\n"
+                f"• [bold]File Size:[/bold] {combined_file.stat().st_size / (1024 * 1024):.2f} MB",
+                title="Combined PDF Ready",
+                border_style="green",
+            )
+        )
+    else:
+        # Question 3: Both pages together or in separate files?
+        console.print("\n[bold cyan]3. How would you like both pages saved?[/bold cyan]")
+        console.print("  [cyan]1[/cyan]) Both pages together in one combined file ([dim]Student1 P1, Student1 P2, Student2 P1, Student2 P2...[/dim])")
+        console.print("  [cyan]2[/cyan]) Separate combined files ([dim]One combined file for all Page 1s, and another for all Page 2s[/dim])")
+
+        page_mode = IntPrompt.ask("Select option", default=1, choices=["1", "2"])
+
+        if page_mode == 1:
+            combined_file = output_dir / "combined_admit_cards_all_pages.pdf"
+            console.print(f"[cyan]Combining all pages of {len(pdf_files)} admit cards...[/cyan]")
+            count = combine_all_pages_together(pdf_files, combined_file)
+            console.print(
+                Panel(
+                    f"[bold green]✔ Successfully created combined PDF (All pages interleaved)![/bold green]\n\n"
+                    f"• [bold]Output File:[/bold] {combined_file.resolve()}\n"
+                    f"• [bold]Total Pages Merged:[/bold] {count}\n"
+                    f"• [bold]File Size:[/bold] {combined_file.stat().st_size / (1024 * 1024):.2f} MB",
+                    title="Combined PDF Ready",
+                    border_style="green",
+                )
+            )
+        else:
+            p1_file = output_dir / "combined_page1_admit_cards.pdf"
+            p2_file = output_dir / "combined_page2_instructions.pdf"
+            console.print(f"[cyan]Generating separate combined PDFs for Page 1 and Page 2...[/cyan]")
+            p1_count, p2_count = combine_separate_pages(pdf_files, p1_file, p2_file)
+            console.print(
+                Panel(
+                    f"[bold green]✔ Successfully created separate combined PDFs![/bold green]\n\n"
+                    f"• [bold]Page 1 File (Admit Cards):[/bold] {p1_file.resolve()} ({p1_count} pages, {p1_file.stat().st_size / (1024 * 1024):.2f} MB)\n"
+                    f"• [bold]Page 2 File (Instructions):[/bold] {p2_file.resolve()} ({p2_count} pages, {p2_file.stat().st_size / (1024 * 1024):.2f} MB)",
+                    title="Combined PDFs Ready",
+                    border_style="green",
+                )
+            )
+
+
+def run_batch_download(settings: Settings, targets: List[StudentTarget], force: bool = False, prompt_combine: bool = True) -> None:
     """Executes the batch download for the given targets and settings."""
     console.print(
         Panel(
@@ -103,6 +193,35 @@ def run_batch_download(settings: Settings, targets: List[StudentTarget], force: 
 
         console.print("\n", err_table)
 
+    # Post-download combination prompt
+    saved_files = [r.file_path for r in results if r.file_path and r.file_path.exists()]
+    if saved_files and prompt_combine:
+        handle_post_download_combination(settings.output_dir, saved_files, prompt_user=True)
+
+
+@app.command(name="combine")
+def combine(
+    folder: Path = typer.Argument(
+        ...,
+        help="Path to folder containing downloaded admit card PDFs (e.g. out/2026-08-20_12-41-12)",
+    ),
+) -> None:
+    """Combine existing admit card PDFs in a folder with interactive page options."""
+    if not folder.exists() or not folder.is_dir():
+        console.print(f"[bold red]Folder not found:[/bold red] {folder}")
+        raise typer.Exit(code=1)
+
+    pdf_files = sorted(
+        [f for f in folder.glob("*.pdf") if not f.name.startswith("combined_")],
+        key=lambda x: x.name,
+    )
+    if not pdf_files:
+        console.print(f"[yellow]No PDF files found in {folder}[/yellow]")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]Found [bold]{len(pdf_files)}[/bold] PDF files in [cyan]{folder}[/cyan][/green]")
+    handle_post_download_combination(folder, pdf_files, prompt_user=False)
+
 
 @app.command(name="interactive")
 def interactive() -> None:
@@ -115,7 +234,8 @@ def interactive() -> None:
             "  2. Provide or confirm your session authentication cookie\n"
             "  3. Load student list from report/Report.xls or paste IDs\n"
             "  4. Choose output folder name inside out/\n"
-            "  5. Verify login and batch download into out/<folder_name>/",
+            "  5. Verify login and batch download into out/<folder_name>/\n"
+            "  6. Interactively combine downloaded PDFs into single or separate files",
             border_style="cyan",
         )
     )
@@ -266,7 +386,6 @@ REQUEST_DELAY="{settings.request_delay}"
         default=default_folder,
     ).strip()
 
-    # Clean up folder name (remove leading out/ or out\ if entered)
     if folder_name.startswith("out/") or folder_name.startswith("out\\"):
         folder_name = folder_name[4:].strip()
     folder_name = folder_name.strip("/\\")
@@ -312,10 +431,10 @@ REQUEST_DELAY="{settings.request_delay}"
                 raise typer.Exit(code=1)
 
     # -------------------------------------------------------------
-    # Step 6: Execute Batch Download
+    # Step 6: Execute Batch Download & Post-Processing
     # -------------------------------------------------------------
     if Confirm.ask(f"Start downloading all [bold]{len(targets)}[/bold] admit cards into [cyan]{settings.output_dir}[/cyan]?", default=True):
-        run_batch_download(settings, targets, force=False)
+        run_batch_download(settings, targets, force=False, prompt_combine=True)
         console.print(f"\n[bold green]🎉 Finished! Check your downloaded admit cards in:[/bold green] [cyan]{settings.output_dir.resolve()}[/cyan]")
 
 
@@ -372,6 +491,11 @@ def download(
         False,
         "--force",
         help="Re-download and overwrite existing admit cards",
+    ),
+    no_combine: bool = typer.Option(
+        False,
+        "--no-combine",
+        help="Skip post-download PDF combination prompts",
     ),
     interactive_mode: bool = typer.Option(
         False,
@@ -456,7 +580,7 @@ def download(
         )
         raise typer.Exit(code=1)
 
-    run_batch_download(settings, targets, force=force)
+    run_batch_download(settings, targets, force=force, prompt_combine=not no_combine)
 
 
 @app.command()

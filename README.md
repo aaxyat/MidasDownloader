@@ -1,8 +1,8 @@
 # MidasDownloader 🎓
 
-A fast, reliable batch downloader for university entrance admit cards with authentication, rate-limiting, progress bars, and resume support.
+A fast, reliable batch downloader for university entrance admit cards with authentication, rate-limiting, progress bars, and PDF combination support.
 
-Built with **Python 3.11+**, **uv**, **httpx**, and **Typer**.
+Built with **Python 3.11+**, **uv**, **httpx**, **pypdf**, and **Typer**.
 
 ---
 
@@ -11,6 +11,10 @@ Built with **Python 3.11+**, **uv**, **httpx**, and **Typer**.
 - 🪄 **Interactive Guided Wizard:** Simply run `uv run midasdownloader` to guide you through URL entry, authentication, student selection, and custom output folder selection.
 - 📑 **Native ERP Report (`.xls`) Support:** Automatically parses student reports (e.g. `report_sample.xls` or `report/Report.xls`), extracting student names and parsing entrance formats like `EN-26-41819` → `41819`.
 - 🏷 **Clean File Naming:** Automatically names downloaded admit cards as `StudentName_id.pdf` (e.g. `Aarav_Sharma_41819.pdf`).
+- 📄 **Interactive PDF Combination:**
+  - **Question 1:** Combine into a single PDF? `[Y/n]`
+  - **Question 2:** Include the second page (instructions/rules)? `[y/N]`
+  - **Question 3:** Merge both pages together in one file or into separate combined files (`combined_page1.pdf` & `combined_page2.pdf`)?
 - 📂 **Custom & Timestamped Output Folder:** Choose a custom folder name inside `out/` (e.g. `out/BIT_Entrance_2083/` or default `out/YYYY-MM-DD_HH-MM-SS/`).
 - 🔒 **CodeIgniter Session Auto-Matching:** Automatically extracts and matches the exact `User-Agent` embedded in CodeIgniter's `ci_session` cookie to prevent session expiration drops.
 - 🧹 **PDF Header Sanitization:** Automatically strips PHP leading whitespace before `%PDF` bytes for 100% compliant PDF files.
@@ -68,13 +72,17 @@ uv run midasdownloader
    https://portal.university.example.edu/entrance/report/prints?entranceid=41819&levelid=3&facultyid=1&programid=30&status=&orgid=undefined&academicbatch=&verified=&isverified=&examcenterid=Y&fromdate=2026-05-27&todate=2026-08-20
    ```
 2. **Step 2:** Confirm your cookie (`ci_session` from `.env`).
-3. **Step 3:** The wizard automatically detects `report_sample.xls` or your report file:
+3. **Step 3:** The wizard automatically detects `report/Report.xls` or `report_sample.xls`:
    ```text
    Found report file report/Report.xls with 53 students. Load from this file? [Y/n]
    ```
    Press **Enter** (Yes), or paste comma-separated IDs directly.
 4. **Step 4:** Choose output folder name inside `out/` (e.g. `BIT_Batch_2083` or press Enter for timestamped default).
-5. **Step 5 & 6:** Confirms pre-flight test check and batch-downloads all admit cards into `out/<folder_name>/`.
+5. **Step 5:** Confirms pre-flight test check and batch-downloads all admit cards into `out/<folder_name>/`.
+6. **Step 6 (Post-Download Combination):**
+   - **Q1:** Do you want to combine the downloaded admit cards into a single PDF? `[Y/n]`
+   - **Q2:** Do you need the second page (instructions)? `[y/N]`
+   - **Q3:** Save both pages together or in separate combined files? `[1/2]`
 
 ---
 
@@ -85,9 +93,10 @@ uv run midasdownloader download -f report_sample.xls -u "https://portal.universi
 
 ---
 
-#### Option C: Direct CLI Command (Comma-Separated IDs)
+#### Option C: Combine an Existing Folder of PDFs
+If you already downloaded admit cards and want to combine them at any time:
 ```bash
-uv run midasdownloader download -i "41819, 41829, 41891, 41895, 41899" -u "https://portal.university.example.edu/entrance/report/prints?entranceid={student_id}&levelid=3&facultyid=1&programid=30&status=&orgid=undefined&academicbatch=&verified=&isverified=&examcenterid=Y&fromdate=2026-05-27&todate=2026-08-20"
+uv run midasdownloader combine out/2026-08-20_12-41-12
 ```
 
 ---
@@ -107,6 +116,7 @@ Options:
   -o, --output-dir PATH   Output folder (e.g. out/BIT_Batch_2083 or default: out/YYYY-MM-DD_HH-MM-SS)
   -d, --delay FLOAT       Delay in seconds between requests (default: 0.4s)
   --force                 Re-download and overwrite existing admit cards
+  --no-combine            Skip post-download PDF combination prompt
   --interactive           Run interactive guided wizard
   --help                  Show this message and exit.
 ```
@@ -123,7 +133,8 @@ MidasDownloader/
 │       ├── __init__.py       # Package entrypoint
 │       ├── cli.py            # Typer CLI & interactive wizard
 │       ├── config.py         # Settings & User-Agent extraction
-│       └── downloader.py     # HTML/XLS parser, streaming engine, PDF sanitizer
+│       ├── downloader.py     # HTML/XLS parser, streaming engine, PDF sanitizer
+│       └── pdf_merger.py     # Multi-page extraction and PDF combination logic
 ├── tests/
 │   └── test_downloader.py    # Unit test suite
 ├── .env.example              # Sample environment template (ci_session)
@@ -132,11 +143,3 @@ MidasDownloader/
 ├── uv.lock                   # Deterministic lockfile
 └── README.md                 # Documentation
 ```
-
----
-
-## 🛡 Security & Best Practices
-
-- **Never commit `.env`:** The `.env` file contains your active login cookie and is ignored by `.gitignore`.
-- **Session Expiration:** If downloads fail with `Authentication failed`, your session cookie in Chrome has expired. Simply log in again on Chrome and copy the refreshed `ci_session` value.
-- **Server Courtesy:** The default delay between downloads is `0.4s` to ensure reliable downloads without triggering rate-limits.

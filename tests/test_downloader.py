@@ -1,6 +1,7 @@
-"""Tests for MidasDownloader parser, suggestions, and target generation."""
+"""Tests for MidasDownloader parser, suggestions, target generation, and PDF merging."""
 
 from pathlib import Path
+from pypdf import PdfReader, PdfWriter
 from midasdownloader.downloader import (
     StudentTarget,
     deduplicate_targets,
@@ -9,6 +10,11 @@ from midasdownloader.downloader import (
     parse_targets_from_range,
     parse_targets_from_text,
     suggest_url_template,
+)
+from midasdownloader.pdf_merger import (
+    combine_all_pages_together,
+    combine_page1_only,
+    combine_separate_pages,
 )
 
 
@@ -54,3 +60,39 @@ def test_url_template_suggestion():
     suggested = suggest_url_template(raw_url)
     expected = "https://portal.university.example.edu/entrance/report/prints?entranceid={student_id}&levelid=3&facultyid=1&programid=30&status=&orgid=undefined&academicbatch=&verified=&isverified=&examcenterid=Y&fromdate=2026-05-27&todate=2026-08-20"
     assert suggested == expected
+
+
+def test_pdf_merging(tmp_path: Path):
+    # Create two 2-page dummy PDFs
+    pdf1_path = tmp_path / "student1.pdf"
+    pdf2_path = tmp_path / "student2.pdf"
+
+    for path in (pdf1_path, pdf2_path):
+        writer = PdfWriter()
+        writer.add_blank_page(width=595, height=842)
+        writer.add_blank_page(width=595, height=842)
+        with open(path, "wb") as f:
+            writer.write(f)
+
+    # 1. Combine Page 1 only
+    combined_p1 = tmp_path / "combined_p1.pdf"
+    count1 = combine_page1_only([pdf1_path, pdf2_path], combined_p1)
+    assert count1 == 2
+    reader1 = PdfReader(str(combined_p1))
+    assert len(reader1.pages) == 2
+
+    # 2. Combine all pages together
+    combined_all = tmp_path / "combined_all.pdf"
+    count_all = combine_all_pages_together([pdf1_path, pdf2_path], combined_all)
+    assert count_all == 4
+    reader_all = PdfReader(str(combined_all))
+    assert len(reader_all.pages) == 4
+
+    # 3. Combine separate pages
+    sep_p1 = tmp_path / "sep_p1.pdf"
+    sep_p2 = tmp_path / "sep_p2.pdf"
+    p1_count, p2_count = combine_separate_pages([pdf1_path, pdf2_path], sep_p1, sep_p2)
+    assert p1_count == 2
+    assert p2_count == 2
+    assert len(PdfReader(str(sep_p1)).pages) == 2
+    assert len(PdfReader(str(sep_p2)).pages) == 2
