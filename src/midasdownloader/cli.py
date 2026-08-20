@@ -228,14 +228,11 @@ def interactive() -> None:
     """Interactive guided wizard to enter URL template, cookie, entrance IDs, and output folder."""
     console.print(
         Panel(
-            "[bold cyan]🎓 MidasDownloader - Admit Card Downloader Wizard[/bold cyan]\n\n"
-            "This wizard will guide you to:\n"
-            "  1. Paste the admit card URL (with entranceid=...)\n"
-            "  2. Provide or confirm your session authentication cookie\n"
-            "  3. Load student list from report/Report.xls or paste IDs\n"
-            "  4. Choose output folder name inside out/\n"
-            "  5. Verify login and batch download into out/<folder_name>/\n"
-            "  6. Interactively combine downloaded PDFs into single or separate files",
+            "[bold cyan]🎓 MidasDownloader - Interactive Session[/bold cyan]\n\n"
+            "• [bold green]In-Memory Security:[/bold green] Your session cookie stays strictly in memory for this session.\n"
+            "• [bold green]Multi-Batch Support:[/bold green] Keep running batch after batch until you choose to exit.\n"
+            "• [bold green]Automatic PDF Merge:[/bold green] Combine Page 1 or all pages after each batch.",
+            title="Admit Card Downloader",
             border_style="cyan",
         )
     )
@@ -243,57 +240,21 @@ def interactive() -> None:
     settings = Settings()
 
     # -------------------------------------------------------------
-    # Step 1: URL Template
+    # Initial Session Setup: Authentication Cookie (In-Memory)
     # -------------------------------------------------------------
-    console.print("\n[bold yellow]Step 1: Admit Card URL Template[/bold yellow]")
-    console.print("Paste the admit card URL (e.g. https://portal.university.example.edu/entrance/report/prints?entranceid=41819&...)")
-
-    user_url = Prompt.ask("\n[bold]Paste URL[/bold]").strip()
-    while not user_url:
-        user_url = Prompt.ask("[bold red]URL cannot be empty. Please paste URL[/bold red]").strip()
-
-    # Smart URL template formatting
-    suggested = suggest_url_template(user_url)
-    if (
-        suggested != user_url
-        and "{student_id}" not in user_url
-        and "{id}" not in user_url
-        and "{entranceid}" not in user_url
-        and "{entrance_id}" not in user_url
-    ):
-        console.print(f"\n[cyan]Detected sample entrance ID in URL. Converted to template:[/cyan]\n[bold green]{suggested}[/bold green]")
-        if Confirm.ask("Use this converted template?", default=True):
-            user_url = suggested
-
-    if (
-        "{student_id}" not in user_url
-        and "{id}" not in user_url
-        and "{roll_no}" not in user_url
-        and "{entranceid}" not in user_url
-        and "{entrance_id}" not in user_url
-    ):
-        console.print("[yellow]Notice: URL doesn't have {student_id} placeholder. Appending /{student_id} to URL.[/yellow]")
-        user_url = user_url.rstrip("/") + "/{student_id}"
-
-    settings.url_template = user_url
-    console.print(f"[green]✔ URL Template set to:[/green] [bold]{settings.url_template}[/bold]")
-
-    # -------------------------------------------------------------
-    # Step 2: Authentication Cookie
-    # -------------------------------------------------------------
-    console.print("\n[bold yellow]Step 2: Authentication Session Cookie[/bold yellow]")
+    console.print("\n[bold yellow]🔑 Authentication Setup[/bold yellow]")
     existing_cookie = settings.cookie_value
     cookie_name = settings.cookie_name or "ci_session"
 
     if existing_cookie:
         masked = f"***{existing_cookie[-6:]}" if len(existing_cookie) > 6 else "***"
         use_existing = Confirm.ask(
-            f"Found existing cookie in .env ([bold cyan]{cookie_name}={masked}[/bold cyan]). Use this?",
+            f"Found existing cookie ([bold cyan]{cookie_name}={masked}[/bold cyan]). Use this session?",
             default=True,
         )
         if not use_existing:
             cookie_name = Prompt.ask("Cookie name", default="ci_session").strip()
-            existing_cookie = Prompt.ask("Enter new cookie value", password=True).strip()
+            existing_cookie = Prompt.ask("Paste session cookie value", password=True).strip()
             settings.cookie_name = cookie_name
             settings.cookie_value = existing_cookie
     else:
@@ -303,139 +264,169 @@ def interactive() -> None:
         settings.cookie_value = Prompt.ask("Paste your session cookie value", password=True).strip()
 
     if not settings.cookie_value:
-        console.print("[bold red]Cookie is required to download admit cards. Aborted.[/bold red]")
+        console.print("[bold red]Cookie is required to download admit cards. Exiting.[/bold red]")
         raise typer.Exit(code=1)
 
-    # Option to save cookie to .env
-    env_file = Path(".env")
-    if not env_file.exists() or Confirm.ask("Save this Cookie to .env for future runs?", default=True):
-        env_content = f"""# Authentication Cookie Configuration
-COOKIE_NAME="{settings.cookie_name}"
-ci_session="{settings.cookie_value}"
-REQUEST_DELAY="{settings.request_delay}"
-"""
-        env_file.write_text(env_content, encoding="utf-8")
-        console.print("[green]✔ Saved authentication cookie to .env[/green]")
+    batch_number = 1
 
     # -------------------------------------------------------------
-    # Step 3: Enter / Load Entrance IDs
+    # Multi-Batch Loop
     # -------------------------------------------------------------
-    console.print("\n[bold yellow]Step 3: Student Entrance IDs[/bold yellow]")
-    targets: List[StudentTarget] = []
+    while True:
+        console.print(f"\n[bold green]═══ Batch #{batch_number} Setup ═══[/bold green]")
 
-    # Check for report file in report/ or root
-    default_report = Path("report/Report.xls")
-    if not default_report.exists():
-        default_report = Path("report_sample.xls")
+        # 1. URL Template
+        console.print("\n[bold yellow]Step 1: Admit Card URL Template[/bold yellow]")
+        console.print("Paste the admit card URL (e.g. from browser address bar with entranceid=...)")
 
-    if default_report.exists():
-        try:
-            detected_targets = parse_targets_from_file(default_report)
-            if detected_targets:
-                if Confirm.ask(
-                    f"Found report file [bold cyan]{default_report}[/bold cyan] with [bold green]{len(detected_targets)}[/bold green] students. Load from this file?",
-                    default=True,
-                ):
-                    targets = detected_targets
-        except Exception:
-            pass
+        user_url = Prompt.ask("[bold]Paste URL[/bold]").strip()
+        while not user_url:
+            user_url = Prompt.ask("[bold red]URL cannot be empty. Please paste URL[/bold red]").strip()
 
-    while not targets:
-        console.print("\nPaste your [bold cyan]comma-separated entrance IDs[/bold cyan] (e.g. 41819, 41829, 41891...) or enter a file path:")
-        raw_ids = Prompt.ask("[bold]Entrance IDs or File Path[/bold]").strip()
+        suggested = suggest_url_template(user_url)
+        if (
+            suggested != user_url
+            and "{student_id}" not in user_url
+            and "{id}" not in user_url
+            and "{entranceid}" not in user_url
+            and "{entrance_id}" not in user_url
+        ):
+            console.print(f"\n[cyan]Detected sample entrance ID in URL. Converted to template:[/cyan]\n[bold green]{suggested}[/bold green]")
+            if Confirm.ask("Use this converted template?", default=True):
+                user_url = suggested
 
-        if not raw_ids:
-            continue
+        if (
+            "{student_id}" not in user_url
+            and "{id}" not in user_url
+            and "{roll_no}" not in user_url
+            and "{entranceid}" not in user_url
+            and "{entrance_id}" not in user_url
+        ):
+            console.print("[yellow]Notice: URL doesn't have {student_id} placeholder. Appending /{student_id} to URL.[/yellow]")
+            user_url = user_url.rstrip("/") + "/{student_id}"
 
-        potential_path = Path(raw_ids)
-        if potential_path.exists() and potential_path.is_file():
+        settings.url_template = user_url
+        console.print(f"[green]✔ URL Template set to:[/green] [bold]{settings.url_template}[/bold]")
+
+        # 2. Student Entrance IDs
+        console.print("\n[bold yellow]Step 2: Student Entrance IDs[/bold yellow]")
+        targets: List[StudentTarget] = []
+
+        default_report = Path("report/Report.xls")
+        if not default_report.exists():
+            default_report = Path("report_sample.xls")
+
+        if default_report.exists():
             try:
-                targets = parse_targets_from_file(potential_path)
-                console.print(f"[green]✔ Loaded {len(targets)} students from {potential_path}[/green]")
-            except Exception as e:
-                console.print(f"[red]Error loading file:[/red] {e}")
+                detected_targets = parse_targets_from_file(default_report)
+                if detected_targets:
+                    if Confirm.ask(
+                        f"Found report file [bold cyan]{default_report}[/bold cyan] with [bold green]{len(detected_targets)}[/bold green] students. Load from this file?",
+                        default=True,
+                    ):
+                        targets = detected_targets
+            except Exception:
+                pass
+
+        while not targets:
+            console.print("\nPaste your [bold cyan]comma-separated entrance IDs[/bold cyan] (e.g. 41819, 41829, 41891...) or enter a file path:")
+            raw_ids = Prompt.ask("[bold]Entrance IDs or File Path[/bold]").strip()
+
+            if not raw_ids:
                 continue
-        else:
-            targets = parse_targets_from_text(raw_ids)
 
-        if not targets:
-            console.print("[bold red]No valid entrance IDs could be parsed. Please try again.[/bold red]")
+            potential_path = Path(raw_ids)
+            if potential_path.exists() and potential_path.is_file():
+                try:
+                    targets = parse_targets_from_file(potential_path)
+                    console.print(f"[green]✔ Loaded {len(targets)} students from {potential_path}[/green]")
+                except Exception as e:
+                    console.print(f"[red]Error loading file:[/red] {e}")
+                    continue
+            else:
+                targets = parse_targets_from_text(raw_ids)
 
-    targets = deduplicate_targets(targets)
-    console.print(f"\n[green]✔ Total Entrance IDs to download:[/green] [bold]{len(targets)}[/bold]")
-    sample_preview = []
-    for t in targets[:5]:
-        if t.name:
-            sample_preview.append(f"{t.name} ({t.clean_id}) -> [dim]{t.get_filename()}[/dim]")
-        else:
-            sample_preview.append(f"{t.clean_id} -> [dim]{t.get_filename()}[/dim]")
-    console.print("[bold]Sample files to save:[/bold]")
-    for sp in sample_preview:
-        console.print(f"  • {sp}")
-    if len(targets) > 5:
-        console.print(f"  [dim]... (+{len(targets) - 5} more students)[/dim]")
+            if not targets:
+                console.print("[bold red]No valid entrance IDs could be parsed. Please try again.[/bold red]")
 
-    # -------------------------------------------------------------
-    # Step 4: Output Folder Location
-    # -------------------------------------------------------------
-    console.print("\n[bold yellow]Step 4: Output Folder Location[/bold yellow]")
-    console.print("Admit cards will be saved inside the [cyan]out/[/cyan] directory.")
-    default_folder = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    folder_name = Prompt.ask(
-        "[bold]Enter folder name inside out/[/bold]",
-        default=default_folder,
-    ).strip()
+        targets = deduplicate_targets(targets)
+        console.print(f"\n[green]✔ Total Entrance IDs for Batch #{batch_number}:[/green] [bold]{len(targets)}[/bold]")
+        sample_preview = []
+        for t in targets[:4]:
+            if t.name:
+                sample_preview.append(f"{t.name} ({t.clean_id}) -> [dim]{t.get_filename()}[/dim]")
+            else:
+                sample_preview.append(f"{t.clean_id} -> [dim]{t.get_filename()}[/dim]")
+        for sp in sample_preview:
+            console.print(f"  • {sp}")
+        if len(targets) > 4:
+            console.print(f"  [dim]... (+{len(targets) - 4} more students)[/dim]")
 
-    if folder_name.startswith("out/") or folder_name.startswith("out\\"):
-        folder_name = folder_name[4:].strip()
-    folder_name = folder_name.strip("/\\")
-    if not folder_name:
-        folder_name = default_folder
+        # 3. Output Folder Location
+        console.print("\n[bold yellow]Step 3: Output Folder Location[/bold yellow]")
+        default_folder = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        folder_name = Prompt.ask(
+            "[bold]Enter folder name inside out/[/bold]",
+            default=default_folder,
+        ).strip()
 
-    settings.output_dir = Path("out") / folder_name
-    console.print(f"[green]✔ Output directory set to:[/green] [bold cyan]{settings.output_dir.resolve()}[/bold cyan]")
+        if folder_name.startswith("out/") or folder_name.startswith("out\\"):
+            folder_name = folder_name[4:].strip()
+        folder_name = folder_name.strip("/\\")
+        if not folder_name:
+            folder_name = default_folder
 
-    # -------------------------------------------------------------
-    # Step 5: Pre-flight Verification Check
-    # -------------------------------------------------------------
-    console.print("\n[bold yellow]Step 5: Verification & Download[/bold yellow]")
-    first_target = targets[0]
-    label = f"{first_target.name} ({first_target.clean_id})" if first_target.name else first_target.clean_id
-    if Confirm.ask(f"Run a test check on the first student ([bold cyan]{label}[/bold cyan]) to verify login?", default=True):
-        downloader = AdmitCardDownloader(settings)
-        console.print(f"[cyan]Testing {first_target.clean_id}...[/cyan]")
-        with downloader.create_client() as client:
-            test_res = downloader.download_single(client, first_target, force=True)
+        settings.output_dir = Path("out") / folder_name
+        console.print(f"[green]✔ Output directory set to:[/green] [bold cyan]{settings.output_dir.resolve()}[/bold cyan]")
 
-        if test_res.status == "success":
-            console.print(
-                Panel(
-                    f"[bold green]✔ Test Check Successful![/bold green]\n\n"
-                    f"[bold]Downloaded sample:[/bold] {test_res.file_path}\n"
-                    f"[bold]File size:[/bold] {test_res.file_size_bytes:,} bytes\n"
-                    f"[bold]Status Code:[/bold] {test_res.status_code}",
-                    border_style="green",
+        # 4. Optional Pre-flight Verification Check
+        console.print("\n[bold yellow]Step 4: Verification & Download[/bold yellow]")
+        first_target = targets[0]
+        label = f"{first_target.name} ({first_target.clean_id})" if first_target.name else first_target.clean_id
+        if Confirm.ask(f"Run a test check on the first student ([bold cyan]{label}[/bold cyan]) to verify login?", default=True):
+            downloader = AdmitCardDownloader(settings)
+            console.print(f"[cyan]Testing {first_target.clean_id}...[/cyan]")
+            with downloader.create_client() as client:
+                test_res = downloader.download_single(client, first_target, force=True)
+
+            if test_res.status == "success":
+                console.print(
+                    Panel(
+                        f"[bold green]✔ Test Check Successful![/bold green]\n\n"
+                        f"[bold]Downloaded sample:[/bold] {test_res.file_path}\n"
+                        f"[bold]File size:[/bold] {test_res.file_size_bytes:,} bytes\n"
+                        f"[bold]Status Code:[/bold] {test_res.status_code}",
+                        border_style="green",
+                    )
                 )
-            )
-        else:
-            console.print(
-                Panel(
-                    f"[bold red]Test Failed![/bold red]\n\n"
-                    f"[bold]Error:[/bold] {test_res.error_message}\n"
-                    f"[bold]Status Code:[/bold] {test_res.status_code or 'N/A'}\n\n"
-                    "Please check if your session cookie expired or if the URL template is correct.",
-                    border_style="red",
+            else:
+                console.print(
+                    Panel(
+                        f"[bold red]Test Failed![/bold red]\n\n"
+                        f"[bold]Error:[/bold] {test_res.error_message}\n"
+                        f"[bold]Status Code:[/bold] {test_res.status_code or 'N/A'}\n\n"
+                        "Please check if your session cookie expired or if the URL template is correct.",
+                        border_style="red",
+                    )
                 )
-            )
-            if not Confirm.ask("Do you still want to proceed with the remaining downloads?", default=False):
-                raise typer.Exit(code=1)
+                if not Confirm.ask("Do you still want to proceed with the remaining downloads?", default=False):
+                    if Confirm.ask("Do you want to re-enter your session cookie?", default=True):
+                        settings.cookie_value = Prompt.ask("Paste refreshed session cookie value", password=True).strip()
+                    continue
 
-    # -------------------------------------------------------------
-    # Step 6: Execute Batch Download & Post-Processing
-    # -------------------------------------------------------------
-    if Confirm.ask(f"Start downloading all [bold]{len(targets)}[/bold] admit cards into [cyan]{settings.output_dir}[/cyan]?", default=True):
-        run_batch_download(settings, targets, force=False, prompt_combine=True)
-        console.print(f"\n[bold green]🎉 Finished! Check your downloaded admit cards in:[/bold green] [cyan]{settings.output_dir.resolve()}[/cyan]")
+        # 5. Batch Download Execution & Combination
+        if Confirm.ask(f"Start downloading all [bold]{len(targets)}[/bold] admit cards into [cyan]{settings.output_dir}[/cyan]?", default=True):
+            run_batch_download(settings, targets, force=False, prompt_combine=True)
+            console.print(f"\n[bold green]🎉 Batch #{batch_number} Finished! Saved in:[/bold green] [cyan]{settings.output_dir.resolve()}[/cyan]")
+
+        # 6. Ask for Next Batch or Exit
+        console.print("\n" + "─" * 60)
+        another_batch = Confirm.ask("[bold cyan]Do you want to download another batch of admit cards?[/bold cyan]", default=False)
+        if not another_batch:
+            console.print("\n[bold green]Thank you for using MidasDownloader! Goodbye 👋[/bold green]\n")
+            break
+
+        batch_number += 1
 
 
 @app.command()
@@ -495,7 +486,7 @@ def download(
     no_combine: bool = typer.Option(
         False,
         "--no-combine",
-        help="Skip post-download PDF combination prompts",
+        help="Skip post-download PDF combination prompt",
     ),
     interactive_mode: bool = typer.Option(
         False,
